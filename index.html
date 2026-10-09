@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14213d">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>Leitor IPTV</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.13/hls.min.js"></script>
+<style>
+:root{--bg:#14213d;--panel:#1c2b4d;--line:#2b3c63;--text:#eef2fb;--mute:#9aa8c7;--acc:#ffb703;--bad:#ff6b6b}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+.bars{height:5px;flex:none;background:linear-gradient(90deg,#fff 0 14%,#ffd60a 0 28%,#00c2d1 0 42%,#4cc94c 0 57%,#e83e8c 0 71%,#e63946 0 85%,#3a6fe0 0)}
+header{padding:10px 14px;display:flex;gap:8px;align-items:center;flex:none}
+h1{font-size:17px;font-weight:700;flex:1}
+h2{font-size:14px;color:var(--mute);font-weight:600;margin-top:6px}
+button,select,input,textarea{font:inherit;color:var(--text)}
+button{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}
+button.pri{background:var(--acc);color:#14213d;border-color:var(--acc);font-weight:700}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.ch:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+video{width:100%;max-height:34vh;display:block;background:#000}
+#now{padding:8px 14px;border-bottom:1px solid var(--line);min-height:40px}
+#now b{display:block}#now small{color:var(--mute)}
+#acts{display:flex;gap:8px;padding:8px 14px 0;flex-wrap:wrap}
+#acts button{padding:6px 10px;font-size:13px}
+#msg,#emsg{padding:0 14px;color:var(--bad);font-size:13px}
+#tools{display:flex;gap:8px;padding:10px 14px}
+#tools input,#tools select{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+#list{flex:1;overflow-y:auto;padding:0 14px 14px}
+#list.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;align-content:start}
+.ch{display:flex;gap:10px;align-items:center;padding:9px 6px;border-bottom:1px solid var(--line);cursor:pointer;position:relative}
+.ch.on{background:var(--panel)}
+.grid .ch{flex-direction:column;text-align:center;border:1px solid var(--line);border-radius:10px;padding:12px 8px;background:var(--panel)}
+.grid .ch.on{border-color:var(--acc)}
+.grid .fav{position:absolute;top:2px;right:2px}
+.ch img,.ph{width:38px;height:38px;border-radius:6px;object-fit:contain;background:var(--panel);flex:none}
+.grid .ch img,.grid .ph{width:64px;height:64px;background:var(--bg)}
+.nm{flex:1;min-width:0;width:100%}.nm b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nm small{color:var(--mute);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fav{background:none;border:0;font-size:20px;padding:4px 8px;color:var(--mute)}.fav.y{color:var(--acc)}
+#setup{padding:12px 14px 24px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;flex:1}
+#setup p{color:var(--mute)}
+#setup input,#setup textarea{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px}
+textarea{min-height:80px;resize:vertical}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.li{display:flex;gap:8px;align-items:center;background:var(--panel);border-radius:8px;padding:8px 10px}
+.li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.li.on{border:1px solid var(--acc)}
+.empty{color:var(--mute);padding:24px 6px;text-align:center;grid-column:1/-1}
+.hide{display:none!important}
+#main{display:flex;flex-direction:column;flex:1;min-height:0}
+</style>
+</head>
+<body>
+<div class="bars"></div>
+<header><h1>Leitor IPTV</h1><button id="btnView" aria-label="Alternar lista e grelha">Grelha</button><button id="btnSetup">Listas</button></header>
+
+<section id="setup" class="hide">
+  <h2>As tuas listas</h2>
+  <div id="lists"></div>
+  <h2>Adicionar lista M3U</h2>
+  <p>Usa só listas a que tens direito de acesso.</p>
+  <input id="lname" placeholder="Nome da lista (opcional)" aria-label="Nome da lista">
+  <input id="url" type="url" placeholder="https://exemplo.com/lista.m3u" aria-label="Endereço da lista M3U">
+  <div class="row"><button class="pri" id="btnUrl">Adicionar do endereço</button><button id="btnFile">Abrir ficheiro</button></div>
+  <textarea id="txt" placeholder="Ou cola aqui o conteúdo da lista (#EXTM3U ...)" aria-label="Conteúdo M3U"></textarea>
+  <button id="btnTxt">Adicionar texto colado</button>
+  <div id="msg" role="alert"></div>
+  <h2>Guia de programação (EPG)</h2>
+  <p>Endereço ou ficheiro XMLTV (.xml ou .xml.gz). Os canais ligam-se pelo tvg-id.</p>
+  <input id="eurl" type="url" placeholder="https://exemplo.com/epg.xml" aria-label="Endereço do EPG">
+  <div class="row"><button id="btnEUrl">Carregar EPG</button><button id="btnEFile">Abrir ficheiro</button></div>
+  <div id="emsg" role="alert"></div>
+  <input id="file" type="file" class="hide">
+  <input id="efile" type="file" class="hide">
+</section>
+
+<section id="main" class="hide">
+  <video id="v" controls playsinline autoplay></video>
+  <div id="now"><b>Escolhe um canal</b><small></small></div>
+  <div id="acts" class="hide"><button id="bVlc">Abrir no VLC</button><button id="bCopy">Copiar endereço</button></div>
+  <div id="tools"><input id="q" type="search" placeholder="Procurar canal" aria-label="Procurar canal"><select id="grp" aria-label="Grupo"></select></div>
+  <div id="list"></div>
+</section>
+
+<script>
+const $=s=>document.querySelector(s);
+const LS=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}};
+const SV=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}};
+let lists=LS('iptv_lists',[]),active=LS('iptv_active',0),favs=LS('iptv_favs',[]),hist=LS('iptv_hist',[]),view=LS('iptv_view','list');
+let chans=[],cur=null,hls=null,epg={};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function parse(t){
+  const out=[];let meta=null;
+  for(const raw of t.split(/\r?\n/)){
+    const l=raw.trim();if(!l)continue;
+    if(l.startsWith('#EXTINF')){
+      const g=a=>{const m=l.match(new RegExp(a+'="([^"]*)"','i'));return m?m[1]:''};
+      meta={name:(l.split(/,(.*)$/)[1]||'').trim()||g('tvg-name')||'Sem nome',logo:g('tvg-logo'),group:g('group-title')||'Outros',id:g('tvg-id')};
+    }else if(!l.startsWith('#')&&/^(https?|rtmp|rtsp):/i.test(l)){
+      out.push({...(meta||{name:l,logo:'',group:'Outros',id:''}),url:l});meta=null;
+    }
+  }
+  return out;
+}
+function show(w){
+  $('#setup').classList.toggle('hide',w!=='setup');
+  $('#main').classList.toggle('hide',w!=='main');
+}
+function drawLists(){
+  const b=$('#lists');b.innerHTML='';
+  if(!lists.length){b.innerHTML='<div class="empty">Ainda não tens listas.</div>';return}
+  lists.forEach((l,i)=>{
+    const d=document.createElement('div');d.className='li'+(i===active?' on':'');
+    d.innerHTML=`<span>${esc(l.name)}</span><button>Abrir</button><button aria-label="Apagar">✕</button>`;
+    d.children[1].onclick=()=>openList(i);
+    d.children[2].onclick=()=>{lists.splice(i,1);if(active>=lists.length)active=Math.max(0,lists.length-1);SV('iptv_lists',lists);SV('iptv_active',active);drawLists()};
+    b.append(d);
+  });
+}
+function addList(text,name){
+  const c=parse(text);
+  if(!c.length){$('#msg').textContent='Não encontrei canais. Confirma que é uma lista M3U válida.';return}
+  lists.push({name:name||('Lista '+(lists.length+1)),text});
+  if(!SV('iptv_lists',lists)){lists.pop();$('#msg').textContent='Lista demasiado grande para guardar no telemóvel.';return}
+  $('#msg').textContent='';$('#lname').value=$('#url').value=$('#txt').value='';
+  openList(lists.length-1);
+}
+function openList(i){
+  active=i;SV('iptv_active',i);
+  chans=parse(lists[i].text);
+  const gs=['Todos','★ Favoritos','🕘 Recentes',...new Set(chans.map(x=>x.group))];
+  $('#grp').innerHTML=gs.map(g=>`<option>${esc(g)}</option>`).join('');
+  drawLists();show('main');render();
+}
+function nowNext(c){
+  const p=c.id&&epg[c.id];if(!p)return null;
+  const t=Date.now(),i=p.findIndex(x=>x.e>t);if(i<0)return null;
+  return p[i].s<=t?{now:p[i],next:p[i+1]}:{now:null,next:p[i]};
+}
+const hm=t=>new Date(t).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'});
+function render(){
+  const q=$('#q').value.toLowerCase(),g=$('#grp').value,box=$('#list');
+  box.className=view==='grid'?'grid':'';$('#btnView').textContent=view==='grid'?'Lista':'Grelha';
+  let f=g==='🕘 Recentes'?hist.map(u=>chans.find(c=>c.url===u)).filter(Boolean)
+    :chans.filter(c=>g==='Todos'||(g==='★ Favoritos'?favs.includes(c.url):c.group===g));
+  f=f.filter(c=>c.name.toLowerCase().includes(q)).slice(0,400);
+  box.innerHTML='';
+  if(!f.length){box.innerHTML='<div class="empty">Nenhum canal encontrado.</div>';return}
+  for(const c of f){
+    const d=document.createElement('div');d.className='ch'+(cur&&cur.url===c.url?' on':'');d.tabIndex=0;
+    const ph=()=>Object.assign(document.createElement('div'),{className:'ph'});
+    const img=c.logo?Object.assign(document.createElement('img'),{src:c.logo,loading:'lazy',alt:'',onerror(){this.replaceWith(ph())}}):ph();
+    const n=document.createElement('div');n.className='nm';n.innerHTML='<b></b><small></small>';
+    n.firstChild.textContent=c.name;
+    const e=nowNext(c);n.lastChild.textContent=e&&e.now?e.now.t:c.group;
+    const s=document.createElement('button');s.className='fav'+(favs.includes(c.url)?' y':'');s.textContent='★';s.setAttribute('aria-label','Favorito');
+    s.onclick=ev=>{ev.stopPropagation();favs=favs.includes(c.url)?favs.filter(x=>x!==c.url):[...favs,c.url];SV('iptv_favs',favs);render()};
+    d.append(img,n,s);d.onclick=()=>play(c);d.onkeydown=ev=>{if(ev.key==='Enter')play(c)};
+    box.append(d);
+  }
+}
+function setNow(c,err){
+  const e=nowNext(c),n=$('#now');
+  n.innerHTML='<b></b><small></small>';n.firstChild.textContent=c.name;
+  n.lastChild.textContent=err?'Não foi possível reproduzir. Tenta o VLC.':e?((e.now?`Agora ${hm(e.now.s)}–${hm(e.now.e)} ${e.now.t}`:'')+(e.next?`${e.now?' · ':''}A seguir ${hm(e.next.s)} ${e.next.t}`:'')):'';
+}
+function play(c){
+  cur=c;setNow(c);$('#acts').classList.remove('hide');
+  hist=[c.url,...hist.filter(u=>u!==c.url)].slice(0,12);SV('iptv_hist',hist);
+  const v=$('#v');if(hls){hls.destroy();hls=null}
+  const fail=()=>setNow(c,true);
+  if(!/\.(mp4|ts|mkv)(\?|$)/i.test(c.url)&&window.Hls&&Hls.isSupported()){
+    hls=new Hls();hls.loadSource(c.url);hls.attachMedia(v);
+    hls.on(Hls.Events.ERROR,(_,d)=>{if(d.fatal)fail()});
+  }else v.src=c.url;
+  v.play().catch(()=>{});v.onerror=fail;render();
+}
+$('#bVlc').onclick=()=>{
+  if(!cur)return;const m=cur.url.match(/^(https?):\/\/(.*)$/i);
+  location.href=m?`intent://${m[2]}#Intent;scheme=${m[1].toLowerCase()};package=org.videolan.vlc;type=video/*;end`:cur.url;
+};
+$('#bCopy').onclick=()=>{if(cur&&navigator.clipboard)navigator.clipboard.writeText(cur.url).then(()=>{$('#bCopy').textContent='Copiado';setTimeout(()=>$('#bCopy').textContent='Copiar endereço',1500)})};
+
+async function getText(r,gz){
+  if(gz&&window.DecompressionStream)return new Response((await r.blob()).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  return r.text();
+}
+$('#btnUrl').onclick=async()=>{
+  const u=$('#url').value.trim();if(!u)return;$('#msg').textContent='A carregar...';
+  try{const r=await fetch(u);if(!r.ok)throw 0;addList(await r.text(),$('#lname').value.trim())}
+  catch(e){$('#msg').textContent='Não consegui abrir o endereço (o servidor pode bloquear o browser). Descarrega a lista e usa "Abrir ficheiro".'}
+};
+$('#btnTxt').onclick=()=>addList($('#txt').value,$('#lname').value.trim());
+$('#btnFile').onclick=()=>$('#file').click();
+$('#file').onchange=e=>{const f=e.target.files[0];if(f)f.text().then(t=>addList(t,$('#lname').value.trim()||f.name.replace(/\.\w+$/,'')));e.target.value=''};
+
+function loadEpg(xml){
+  const doc=new DOMParser().parseFromString(xml,'text/xml'),now=Date.now(),lim=now+864e5,m={};
+  const T=s=>{const a=s.match(/^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)\s*([+-])?(\d\d)?(\d\d)?/);if(!a)return 0;
+    const o=a[7]?(a[7]==='-'?-1:1)*((+a[8]||0)*60+(+a[9]||0)):0;return Date.UTC(+a[1],a[2]-1,+a[3],+a[4],+a[5],+a[6])-o*6e4};
+  for(const p of doc.getElementsByTagName('programme')){
+    const s=T(p.getAttribute('start')||''),e=T(p.getAttribute('stop')||'');
+    if(e<now||s>lim)continue;
+    const ch=p.getAttribute('channel'),t=(p.getElementsByTagName('title')[0]||{}).textContent||'';
+    (m[ch]=m[ch]||[]).push({s,e,t});
+  }
+  for(const k in m)m[k].sort((a,b)=>a.s-b.s);
+  epg=m;const n=Object.keys(m).length;
+  $('#emsg').style.color=n?'var(--mute)':'var(--bad)';
+  $('#emsg').textContent=n?`EPG carregado: ${n} canais com programação.`:'Não encontrei programação válida neste ficheiro.';
+  render();
+}
+$('#btnEUrl').onclick=async()=>{
+  const u=$('#eurl').value.trim();if(!u)return;$('#emsg').textContent='A carregar...';
+  try{const r=await fetch(u);if(!r.ok)throw 0;loadEpg(await getText(r,/\.gz(\?|$)/i.test(u)))}
+  catch(e){$('#emsg').style.color='var(--bad)';$('#emsg').textContent='Não consegui abrir o EPG. Descarrega o ficheiro e usa "Abrir ficheiro".'}
+};
+$('#btnEFile').onclick=()=>$('#efile').click();
+$('#efile').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{loadEpg(await getText(new Response(f),/\.gz$/i.test(f.name)))}catch(x){$('#emsg').textContent='Ficheiro de EPG inválido.'}
+  e.target.value='';
+};
+
+$('#btnSetup').onclick=()=>{drawLists();show($('#setup').classList.contains('hide')?'setup':(chans.length?'main':'setup'))};
+$('#btnView').onclick=()=>{view=view==='grid'?'list':'grid';SV('iptv_view',view);render()};
+$('#q').oninput=render;$('#grp').onchange=render;
+drawLists();
+if(lists.length){if(active>=lists.length)active=0;openList(active)}else show('setup');
+if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
